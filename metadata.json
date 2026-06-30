@@ -1,0 +1,8 @@
+{
+  "name": "Petit_Hero",
+  "description": "Petit_Hero: A grid random walking hero demo with 64x64px directional spritesheet animations built on Phaser 3.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
