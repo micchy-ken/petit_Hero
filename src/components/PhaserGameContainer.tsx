@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Phaser from 'phaser';
 import { GridMovementScene, HeroState, Direction, ActionLog } from '../phaser/GridMovementScene';
-import { Play, Pause, RotateCcw, Eye, EyeOff, Sparkles, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Gauge, Grid, Image as ImageIcon, Heart, Sword, Star, Settings, X, Move } from 'lucide-react';
+import { Play, Pause, RotateCcw, Eye, EyeOff, Sparkles, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Gauge, Grid, Image as ImageIcon, Heart, Sword, Star, Settings, X, Move, Flame, Zap } from 'lucide-react';
 
 export const PhaserGameContainer: React.FC = () => {
   const gameContainerRef = useRef<HTMLDivElement>(null);
@@ -349,6 +349,71 @@ export const PhaserGameContainer: React.FC = () => {
               </div>
             </div>
 
+            {/* 魔法スロット（通常モード Lv8以上で解放） */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+              {/* 火の魔法 */}
+              <div className={`p-3 rounded-xl border flex items-center justify-between text-xs font-mono transition-all duration-300 ${
+                heroState.level >= 8 
+                  ? "bg-gradient-to-r from-red-950/70 to-orange-950/70 border-orange-500/30 text-orange-200" 
+                  : "bg-slate-900/40 border-slate-800 text-slate-500"
+              }`}>
+                <div className="flex flex-col gap-0.5">
+                  <div className={`flex items-center gap-1.5 font-sans font-bold ${heroState.level >= 8 ? 'text-orange-400' : 'text-slate-500'}`}>
+                    <Flame className={`w-4 h-4 ${heroState.level >= 8 ? 'text-orange-500 animate-pulse' : 'text-slate-600'}`} />
+                    <span>火の魔法 (ファイア)</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400">
+                    {heroState.level >= 8 
+                      ? "4方向直線: 3秒毎 / [Space]" 
+                      : "Lv.8以上で解放"}
+                  </span>
+                </div>
+                <button
+                  onClick={() => sceneRef.current?.castFireMagic()}
+                  disabled={heroState.level < 8}
+                  className={`font-bold py-1.5 px-3 rounded-lg flex items-center gap-1 transition-all text-xs active:scale-95 ${
+                    heroState.level >= 8
+                      ? "bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white cursor-pointer shadow-md shadow-red-500/20"
+                      : "bg-slate-800 text-slate-600 border border-slate-700/50 cursor-not-allowed"
+                  }`}
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  詠唱
+                </button>
+              </div>
+
+              {/* 氷の魔法 */}
+              <div className={`p-3 rounded-xl border flex items-center justify-between text-xs font-mono transition-all duration-300 ${
+                heroState.level >= 8 
+                  ? "bg-gradient-to-r from-sky-950/70 to-blue-950/70 border-sky-500/30 text-sky-200" 
+                  : "bg-slate-900/40 border-slate-800 text-slate-500"
+              }`}>
+                <div className="flex flex-col gap-0.5">
+                  <div className={`flex items-center gap-1.5 font-sans font-bold ${heroState.level >= 8 ? 'text-sky-400' : 'text-slate-500'}`}>
+                    <Sparkles className={`w-4 h-4 ${heroState.level >= 8 ? 'text-sky-400 animate-pulse' : 'text-slate-600'}`} />
+                    <span>氷の魔法 (アイシクル)</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400">
+                    {heroState.level >= 8 
+                      ? "周囲8マス: 5秒毎自動" 
+                      : "Lv.8以上で解放"}
+                  </span>
+                </div>
+                <button
+                  onClick={() => sceneRef.current?.castIceMagic()}
+                  disabled={heroState.level < 8}
+                  className={`font-bold py-1.5 px-3 rounded-lg flex items-center gap-1 transition-all text-xs active:scale-95 ${
+                    heroState.level >= 8
+                      ? "bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white cursor-pointer shadow-md shadow-sky-500/20"
+                      : "bg-slate-800 text-slate-600 border border-slate-700/50 cursor-not-allowed"
+                  }`}
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  詠唱
+                </button>
+              </div>
+            </div>
+
             {/* デモ自動切替用のレベル調整ショートカット */}
             <div className="w-full mt-3 p-3 bg-slate-900 border border-slate-700/40 rounded-xl flex items-center justify-between text-xs font-mono">
               <div className="flex items-center gap-1.5 text-slate-300 font-sans font-bold">
@@ -587,7 +652,7 @@ export const PhaserGameContainer: React.FC = () => {
                   {heroState.level >= 6 && heroState.level < 8 && <span className="text-[9px] bg-amber-600 text-white px-1 rounded">現在</span>}
                 </div>
                 <div className={`flex justify-between items-center px-1.5 py-0.5 rounded ${heroState.level >= 8 ? "bg-amber-100 text-amber-900 font-bold" : "text-slate-400"}`}>
-                  <span>・Lv.8〜: HD-2D / 450ms / 8方向 / FX & GrassBGオン</span>
+                  <span>・Lv.8〜 (通常モード): 8方向 / FX & GrassBGオン / 火の魔法</span>
                   {heroState.level >= 8 && <span className="text-[9px] bg-amber-600 text-white px-1 rounded">現在</span>}
                 </div>
               </div>

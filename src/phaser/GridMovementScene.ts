@@ -82,6 +82,8 @@ export class GridMovementScene extends Phaser.Scene {
   private heroAttack: number = 5;
   private heroLevel: number = 1;
   private heroExp: number = 0;
+  private lastFireMagicTime: number = 0;
+  private lastIceMagicTime: number = 0;
 
   // Pointer Movement
   private pointerTargetGridX: number | null = null;
@@ -352,7 +354,7 @@ export class GridMovementScene extends Phaser.Scene {
           targetGridY >= 0 && targetGridY < GridMovementScene.GRID_ROWS) {
         this.pointerTargetGridX = targetGridX;
         this.pointerTargetGridY = targetGridY;
-        this.sendLog(`Moving to (${targetGridX}, ${targetGridY})`, 'system');
+        this.sendLog(`(${targetGridX}, ${targetGridY}) へ移動中...`, 'system');
       }
     });
 
@@ -370,6 +372,30 @@ export class GridMovementScene extends Phaser.Scene {
   }
 
   public update(time: number, delta: number) {
+    // 通常モード (レベル8以上) のみ、火の魔法と氷の魔法をサポート
+    if (this.heroLevel >= 8) {
+      // 火の魔法 自動詠唱 (3秒に1回、敵がいる場合)
+      if (time - this.lastFireMagicTime > 3000) {
+        if (this.slimes.length > 0) {
+          this.castFireMagic();
+          this.lastFireMagicTime = time;
+        }
+      }
+
+      // 氷の魔法 自動詠唱 (5秒に1回、敵がいる場合)
+      if (time - this.lastIceMagicTime > 5000) {
+        if (this.slimes.length > 0) {
+          this.castIceMagic();
+          this.lastIceMagicTime = time;
+        }
+      }
+
+      // 手動詠唱 (Spaceキーが押された場合)
+      if (this.cursors && Phaser.Input.Keyboard.JustDown(this.cursors.space)) {
+        this.castFireMagic();
+      }
+    }
+
     if (this.autoMode === 'none' && !this.isMoving) {
       let moved = false;
       
@@ -778,7 +804,7 @@ export class GridMovementScene extends Phaser.Scene {
           hp: 10,
           maxHp: 10
         });
-        this.sendLog('A wild slime appeared!', 'system');
+        this.sendLog('野生のスライムが現れた！ 👾', 'system');
       }
     }
 
@@ -886,27 +912,141 @@ export class GridMovementScene extends Phaser.Scene {
 
     const damage = Math.max(1, this.heroAttack - 1); // Simple damage calc
     slime.hp -= damage;
-    this.sendLog(`Hero hit Slime for ${damage} damage!`, 'combat');
+    this.sendLog(`勇者の通常攻撃！ スライムに ${damage} ダメージを与えた！ ⚔️`, 'combat');
 
-    // 攻撃エフェクト
-    const slash = this.add.graphics();
-    slash.setDepth(15);
-    slash.lineStyle(4, 0xfacc15, 1);
-    const sx = slime.sprite.x - 20;
-    const sy = slime.sprite.y - 20;
-    const ex = slime.sprite.x + 20;
-    const ey = slime.sprite.y + 20;
-    slash.beginPath();
-    slash.moveTo(sx, sy);
-    slash.lineTo(ex, ey);
-    slash.strokePath();
+    // 攻撃エフェクト (本格的な円弧のダブルクロス・スラッシュ & スパーク)
+    
+    // 1. 1発目のスラッシュ (左上から右下への鋭い一閃)
+    const slash1 = this.add.graphics();
+    slash1.setDepth(15);
+    const angle1 = -Math.PI / 6; // やや右肩下がり
+    const radius1 = 28;
+    const animState1 = { progress: 0 };
     
     this.tweens.add({
-      targets: slash,
-      alpha: 0,
-      duration: 300,
-      onComplete: () => slash.destroy()
+      targets: animState1,
+      progress: 1,
+      duration: 180,
+      ease: 'Cubic.easeOut',
+      onUpdate: () => {
+        slash1.clear();
+        const p = animState1.progress;
+        const start = angle1 - Math.PI / 2 + p * Math.PI * 0.4;
+        const end = angle1 - Math.PI / 2 + p * Math.PI * 1.3;
+        
+        // 黄金の斬撃オーラ
+        slash1.lineStyle(6, 0xffaa00, (1 - p) * 0.85);
+        slash1.beginPath();
+        slash1.arc(slime.sprite.x, slime.sprite.y, radius1, start, end, false);
+        slash1.strokePath();
+
+        // 鋭い刃光 (白)
+        slash1.lineStyle(2, 0xffffff, (1 - p) * 1.0);
+        slash1.beginPath();
+        slash1.arc(slime.sprite.x, slime.sprite.y, radius1, start + 0.1, end - 0.1, false);
+        slash1.strokePath();
+      },
+      onComplete: () => slash1.destroy()
     });
+
+    // 2. 2発目のスラッシュ (少し遅れて右上から左下へ交差する一閃)
+    this.time.delayedCall(80, () => {
+      if (!slime.sprite || !slime.sprite.active) return;
+      const slash2 = this.add.graphics();
+      slash2.setDepth(15);
+      const angle2 = (Math.PI * 5) / 6; // 反対方向への傾き
+      const radius2 = 25;
+      const animState2 = { progress: 0 };
+
+      this.tweens.add({
+        targets: animState2,
+        progress: 1,
+        duration: 180,
+        ease: 'Cubic.easeOut',
+        onUpdate: () => {
+          slash2.clear();
+          const p = animState2.progress;
+          const start = angle2 - Math.PI / 2 + p * Math.PI * 0.4;
+          const end = angle2 - Math.PI / 2 + p * Math.PI * 1.3;
+
+          // シアン/スカイブルーの斬撃オーラ (2段目は美しい色合いの変化)
+          slash2.lineStyle(5, 0x00f0ff, (1 - p) * 0.85);
+          slash2.beginPath();
+          slash2.arc(slime.sprite.x, slime.sprite.y, radius2, start, end, false);
+          slash2.strokePath();
+
+          // 鋭い刃光 (白)
+          slash2.lineStyle(1.5, 0xffffff, (1 - p) * 1.0);
+          slash2.beginPath();
+          slash2.arc(slime.sprite.x, slime.sprite.y, radius2, start + 0.08, end - 0.08, false);
+          slash2.strokePath();
+        },
+        onComplete: () => slash2.destroy()
+      });
+    });
+
+    // 3. 火花・衝撃スパーク
+    for (let i = 0; i < 12; i++) {
+      const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+      const speed = Phaser.Math.Between(150, 300);
+      const size = Phaser.Math.Between(2, 5);
+      const spark = this.add.graphics();
+      spark.setDepth(16);
+      spark.setPosition(slime.sprite.x, slime.sprite.y);
+      
+      // 火花のひし形
+      spark.fillStyle(0xfff59d, 0.9);
+      spark.fillTriangle(0, -size, -size * 0.5, 0, size * 0.5, 0);
+      spark.fillTriangle(0, size, -size * 0.5, 0, size * 0.5, 0);
+
+      this.tweens.add({
+        targets: spark,
+        x: slime.sprite.x + Math.cos(angle) * speed * 0.25,
+        y: slime.sprite.y + Math.sin(angle) * speed * 0.25,
+        scale: 0,
+        alpha: 0,
+        angle: Phaser.Math.Between(0, 360),
+        duration: Phaser.Math.Between(300, 500),
+        ease: 'Quad.easeOut',
+        onComplete: () => spark.destroy()
+      });
+    }
+
+    // 4. ヒット時のカメラ微揺れと、スライムの赤フラッシュ & ノックバック
+    this.cameras.main.shake(80, 0.006);
+    
+    // スライムの赤色点滅 (ティント) と微小なノックバック
+    if (slime.sprite && slime.sprite.active) {
+      slime.sprite.setTint(0xff5555);
+      
+      // 被弾方向への小さな揺れ
+      const knockX = (slime.sprite.x - this.hero.x) * 0.15;
+      const knockY = (slime.sprite.y - this.hero.y) * 0.15;
+      const origSlimeX = slime.sprite.x;
+      const origSlimeY = slime.sprite.y;
+
+      this.tweens.add({
+        targets: slime.sprite,
+        x: origSlimeX + knockX,
+        y: origSlimeY + knockY,
+        duration: 50,
+        yoyo: true,
+        onComplete: () => {
+          if (slime.sprite && slime.sprite.active) {
+            slime.sprite.clearTint();
+            slime.sprite.x = origSlimeX;
+            slime.sprite.y = origSlimeY;
+          }
+        }
+      });
+
+      // 150ms後にティントを安全にクリア
+      this.time.delayedCall(150, () => {
+        if (slime.sprite && slime.sprite.active) {
+          slime.sprite.clearTint();
+        }
+      });
+    }
 
     // ちょっとだけ前進して戻る（バンプ）
     const origX = this.hero.x;
@@ -925,7 +1065,7 @@ export class GridMovementScene extends Phaser.Scene {
         this.isMoving = false;
 
         if (slime.hp <= 0) {
-          this.sendLog(`Slime was defeated! Gained 2 EXP.`, 'info');
+          this.sendLog(`スライムを倒した！ 経験値を 2 獲得。 🌟`, 'info');
           this.heroExp += 2;
           if (this.heroExp >= 10) {
             this.heroLevel++;
@@ -933,7 +1073,7 @@ export class GridMovementScene extends Phaser.Scene {
             this.heroMaxHp += 5;
             this.heroHp = this.heroMaxHp;
             this.heroAttack += 2;
-            this.sendLog(`Level Up! You are now level ${this.heroLevel}.`, 'system');
+            this.sendLog(`レベルアップ！ レベル ${this.heroLevel} になりました！ 🎉`, 'system');
           }
           
           this.tweens.add({
@@ -979,7 +1119,7 @@ export class GridMovementScene extends Phaser.Scene {
         
         const damage = 2; // Fixed damage for now
         this.heroHp = Math.max(0, this.heroHp - damage);
-        this.sendLog(`Slime attacked Hero for ${damage} damage!`, 'damage');
+        this.sendLog(`スライムの体当たり！ 勇者は ${damage} ダメージを受けた！ 💥`, 'damage');
         
         // 画面フラッシュ
         this.cameras.main.flash(200, 255, 0, 0);
@@ -987,11 +1127,11 @@ export class GridMovementScene extends Phaser.Scene {
         this.notifyStateChange(false);
 
         if (this.heroHp <= 0) {
-          this.sendLog(`Hero was defeated...`, 'system');
+          this.sendLog(`勇者は力尽きてしまった... 💀`, 'system');
           // 本当はゲームオーバー処理を入れる
           this.time.delayedCall(1000, () => {
              this.heroHp = this.heroMaxHp;
-             this.sendLog(`Hero was revived!`, 'system');
+             this.sendLog(`勇者は不思議な力で復活した！ ✨`, 'system');
              this.notifyStateChange(false);
           });
         }
@@ -1277,8 +1417,381 @@ export class GridMovementScene extends Phaser.Scene {
     this.heroHp = this.heroMaxHp;
     this.heroAttack += 2;
     this.heroExp = 0;
-    this.sendLog(`[Demo] Leveled up! You are now level ${this.heroLevel}.`, 'system');
+    this.sendLog(`[デモ] レベルアップ！ レベル ${this.heroLevel} になりました！ 🎉`, 'system');
     this.notifyStateChange();
+  }
+
+  public castFireMagic() {
+    if (this.heroLevel < 8) {
+      this.sendLog("火の魔法は通常モード（Lv.8以上）でのみ使用可能です。", "system");
+      return;
+    }
+
+    if (this.slimes.length === 0) {
+      return;
+    }
+
+    // 最も近いスライムをターゲットにする
+    let targetSlime: SlimeData | null = null;
+    let minDistance = Infinity;
+
+    this.slimes.forEach(slime => {
+      const dist = Phaser.Math.Distance.Between(this.hero.x, this.hero.y, slime.sprite.x, slime.sprite.y);
+      if (dist < minDistance) {
+        minDistance = dist;
+        targetSlime = slime;
+      }
+    });
+
+    if (targetSlime) {
+      this.shootFireball(targetSlime);
+    }
+  }
+
+  private shootFireball(targetSlime: SlimeData) {
+    const startX = this.hero.x;
+    const startY = this.hero.y;
+    const endX = targetSlime.sprite.x;
+    const endY = targetSlime.sprite.y;
+
+    const dx = endX - startX;
+    const dy = endY - startY;
+
+    // 4方向（十字方向）のみに飛ぶように軸を制限する
+    let targetX = startX;
+    let targetY = startY;
+
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      // 左右方向
+      targetX = endX;
+      targetY = startY;
+    } else {
+      // 上下方向
+      targetX = startX;
+      targetY = endY;
+    }
+
+    // 火の魔法（ファイアボール）のコンテナ作成
+    const fireball = this.add.container(startX, startY);
+    fireball.setDepth(15);
+
+    // 重ね合わせによるリッチな光沢エフェクト (HD-2D風)
+    const outerGlow = this.add.circle(0, 0, 14, 0xff3300, 0.4);
+    const midGlow = this.add.circle(0, 0, 9, 0xff7700, 0.7);
+    const innerCore = this.add.circle(0, 0, 4, 0xffdd00, 1.0);
+    fireball.add([outerGlow, midGlow, innerCore]);
+
+    const dist = Phaser.Math.Distance.Between(startX, startY, targetX, targetY);
+    const speed = 400; // ピクセル/秒の飛行速度
+    const duration = (dist / speed) * 1000;
+
+    this.sendLog("火の魔法（ファイアボール）を直線に放った！ 🔥", "combat");
+
+    this.tweens.add({
+      targets: fireball,
+      x: targetX,
+      y: targetY,
+      duration: duration,
+      onUpdate: () => {
+        // 飛行中、火の粉（トレイル）を発生させる
+        if (Math.random() < 0.5) {
+          const sparkX = fireball.x + Phaser.Math.Between(-6, 6);
+          const sparkY = fireball.y + Phaser.Math.Between(-6, 6);
+          const spark = this.add.circle(sparkX, sparkY, Phaser.Math.Between(3, 6), 0xff5500, 0.8);
+          spark.setDepth(14);
+          this.tweens.add({
+            targets: spark,
+            scale: 0,
+            alpha: 0,
+            duration: 250,
+            onComplete: () => spark.destroy()
+          });
+        }
+      },
+      onComplete: () => {
+        fireball.destroy();
+        // 直撃ポイント近くにいるスライムすべてにダメージを与える
+        this.triggerFireExplosionAt(targetX, targetY);
+      }
+    });
+  }
+
+  private triggerFireExplosionAt(x: number, y: number) {
+    const fireDamage = 8;
+    
+    // 爆発の近く（48px以内）にいるスライムを探す
+    const hitSlimes = this.slimes.filter(slime => {
+      if (!slime.sprite || !slime.sprite.active) return false;
+      const dist = Phaser.Math.Distance.Between(x, y, slime.sprite.x, slime.sprite.y);
+      return dist <= 48;
+    });
+
+    if (hitSlimes.length > 0) {
+      hitSlimes.forEach(targetSlime => {
+        targetSlime.hp -= fireDamage;
+        this.sendLog(`ファイアボールが直撃！ スライムに ${fireDamage} ダメージを与えた！ 🔥`, "combat");
+
+        // スライムの撃破処理
+        if (targetSlime.hp <= 0) {
+          this.sendLog(`スライムを焼き尽くした！ 経験値を 2 獲得。`, "info");
+          this.heroExp += 2;
+          if (this.heroExp >= 10) {
+            this.heroLevel++;
+            this.heroExp = 0;
+            this.heroMaxHp += 5;
+            this.heroHp = this.heroMaxHp;
+            this.heroAttack += 2;
+            this.sendLog(`レベルアップ！ レベル ${this.heroLevel} になりました！`, "system");
+          }
+
+          this.tweens.add({
+            targets: targetSlime.sprite,
+            scaleX: 0,
+            scaleY: 0,
+            alpha: 0,
+            duration: 200,
+            onComplete: () => {
+              if (targetSlime.sprite && targetSlime.sprite.active) targetSlime.sprite.destroy();
+            }
+          });
+
+          const currentIdx = this.slimes.indexOf(targetSlime);
+          if (currentIdx !== -1) {
+            this.slimes.splice(currentIdx, 1);
+          }
+        }
+      });
+    } else {
+      this.sendLog("ファイアボールは外れて爆発した。 🔥", "combat");
+    }
+
+    // 1. 火花の拡散エフェクト (10方向)
+    for (let i = 0; i < 10; i++) {
+      const angle = (i * Math.PI * 2) / 10;
+      const speed = Phaser.Math.Between(100, 200);
+      const spark = this.add.circle(x, y, Phaser.Math.Between(2, 4), 0xff5500, 1);
+      spark.setDepth(16);
+
+      this.tweens.add({
+        targets: spark,
+        x: x + Math.cos(angle) * speed * 0.3,
+        y: y + Math.sin(angle) * speed * 0.3,
+        scale: 0,
+        alpha: 0,
+        duration: Phaser.Math.Between(300, 500),
+        onComplete: () => spark.destroy()
+      });
+    }
+
+    // 2. 爆発波（衝撃波）のエフェクト
+    const wave = this.add.circle(x, y, 5, 0xffaa00, 0.4);
+    wave.setDepth(15);
+    this.tweens.add({
+      targets: wave,
+      scale: 8,
+      alpha: 0,
+      duration: 300,
+      onComplete: () => wave.destroy()
+    });
+
+    this.notifyStateChange(false);
+  }
+
+  public castIceMagic() {
+    if (this.heroLevel < 8) {
+      this.sendLog("氷の魔法は通常モード（Lv.8以上）でのみ使用可能です。", "system");
+      return;
+    }
+
+    this.sendLog("氷の魔法（アイシクル・サークル）！ ❄️", "combat");
+
+    const GRID_SIZE = GridMovementScene.GRID_SIZE;
+    const hx = this.hero.x;
+    const hy = this.hero.y;
+
+    // 1. 周囲8マスの敵（スライム）を探す (ゲーム上の攻撃判定は8マスのまま)
+    const hitSlimes = this.slimes.filter(slime => {
+      if (!slime.sprite || !slime.sprite.active) return false;
+      const dx = Math.abs(slime.gridX - this.currentGridX);
+      const dy = Math.abs(slime.gridY - this.currentGridY);
+      return dx <= 1 && dy <= 1 && !(dx === 0 && dy === 0);
+    });
+
+    // 2. 精細な「氷の円（アイシクル・サークル）」演出用コンテナ
+    const iceContainer = this.add.container(hx, hy);
+    iceContainer.setDepth(15);
+
+    // 2-1. 美しい氷結の魔法陣（同心円・多重幾何学構造）
+    const magicCircle = this.add.graphics();
+    iceContainer.add(magicCircle);
+
+    // 円の半径
+    const radius = GRID_SIZE * 1.1; // 約52〜53px
+
+    // 魔法陣のベース描画 (半透明の極寒の青いオーラ)
+    magicCircle.fillStyle(0x33ccff, 0.15);
+    magicCircle.fillCircle(0, 0, radius);
+
+    // 外側の精細な氷の装飾リング
+    magicCircle.lineStyle(1.5, 0x00d8ff, 0.6);
+    magicCircle.strokeCircle(0, 0, radius);
+    magicCircle.lineStyle(1.0, 0xffffff, 0.8);
+    magicCircle.strokeCircle(0, 0, radius - 4);
+    
+    // 内側のルーンリング
+    magicCircle.lineStyle(1.0, 0x88f0ff, 0.4);
+    magicCircle.strokeCircle(0, 0, radius * 0.5);
+
+    // 八角形の氷の結界線を引く (8マス効果を象徴した幾何学デザイン)
+    magicCircle.lineStyle(0.8, 0x00f0ff, 0.3);
+    magicCircle.beginPath();
+    for (let i = 0; i <= 8; i++) {
+      const angle = (i * Math.PI) / 4;
+      const tx = Math.cos(angle) * (radius - 2);
+      const ty = Math.sin(angle) * (radius - 2);
+      if (i === 0) magicCircle.moveTo(tx, ty);
+      else magicCircle.lineTo(tx, ty);
+    }
+    magicCircle.closePath();
+    magicCircle.strokePath();
+
+    // 2-2. 円周上の16箇所に配置される、外向きの「氷の結晶（クリスタル）」
+    const shardCount = 16;
+    for (let i = 0; i < shardCount; i++) {
+      const angle = (i * Math.PI * 2) / shardCount;
+      const cx = Math.cos(angle) * radius;
+      const cy = Math.sin(angle) * radius;
+
+      const crystal = this.add.graphics();
+      crystal.setPosition(cx, cy);
+      // 外向きになるように回転
+      crystal.setRotation(angle + Math.PI / 2);
+
+      // 青から白の精細なグラデーション調のトゲ
+      crystal.fillStyle(0x00bfff, 0.65);
+      crystal.fillTriangle(-5, 0, 5, 0, 0, -16);
+      crystal.fillStyle(0xffffff, 0.9);
+      crystal.fillTriangle(-2.5, 0, 2.5, 0, 0, -12);
+      crystal.lineStyle(0.8, 0xffffff, 0.85);
+      crystal.strokeTriangle(-5, 0, 5, 0, 0, -16);
+
+      iceContainer.add(crystal);
+    }
+
+    // アニメーション設定：サークルを回転させながらポップさせ、最後は砕け散るように拡大フェードアウト
+    iceContainer.setScale(0);
+    iceContainer.setAlpha(0);
+
+    // 3. メインのアニメーション
+    this.tweens.add({
+      targets: iceContainer,
+      scale: 1.0,
+      alpha: 1.0,
+      angle: 180, // ぐるりと回転
+      duration: 500,
+      ease: 'Back.easeOut',
+      onComplete: () => {
+        // 回転が最高潮に達したあと、一気にサークル全体が拡大＆フェードアウト
+        this.tweens.add({
+          targets: iceContainer,
+          scale: 1.3,
+          alpha: 0,
+          angle: 240,
+          duration: 400,
+          ease: 'Sine.easeOut',
+          onComplete: () => {
+            iceContainer.destroy();
+          }
+        });
+
+        // 美しいきらめき氷屑を24方向へ放射状に吹き飛ばす
+        for (let i = 0; i < 24; i++) {
+          const angle = (i * Math.PI * 2) / 24 + Phaser.Math.FloatBetween(-0.1, 0.1);
+          const speed = Phaser.Math.Between(70, 150);
+          const size = Phaser.Math.Between(2, 5);
+          
+          const shard = this.add.graphics();
+          shard.setDepth(16);
+          shard.setPosition(hx, hy);
+          shard.fillStyle(0xe0faff, 0.9);
+          // 綺麗なひし形の結晶
+          shard.fillTriangle(0, -size, -size * 0.6, 0, size * 0.6, 0);
+          shard.fillTriangle(0, size, -size * 0.6, 0, size * 0.6, 0);
+
+          this.tweens.add({
+            targets: shard,
+            x: hx + Math.cos(angle) * speed * 0.5,
+            y: hy + Math.sin(angle) * speed * 0.5,
+            scale: 0,
+            angle: Phaser.Math.Between(0, 360),
+            alpha: 0,
+            duration: Phaser.Math.Between(400, 750),
+            ease: 'Cubic.easeOut',
+            onComplete: () => shard.destroy()
+          });
+        }
+      }
+    });
+
+    // 4. 冷気ダストの微細な舞い上がり
+    for (let i = 0; i < 8; i++) {
+      const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+      const startDist = Phaser.Math.Between(10, radius);
+      const px = hx + Math.cos(angle) * startDist;
+      const py = hy + Math.sin(angle) * startDist;
+      const iceMote = this.add.circle(px, py, Phaser.Math.Between(2, 4), 0xaae8ff, 0.7);
+      iceMote.setDepth(16);
+
+      this.tweens.add({
+        targets: iceMote,
+        y: py - Phaser.Math.Between(15, 35),
+        x: px + Phaser.Math.Between(-10, 10),
+        alpha: 0,
+        scale: 0.2,
+        duration: Phaser.Math.Between(600, 900),
+        ease: 'Quad.easeOut',
+        onComplete: () => iceMote.destroy()
+      });
+    }
+
+    // 5. ダメージ適用 (効果は周囲8マスのまま)
+    const iceDamage = 12; // 氷の魔法は周囲のみのため強力
+    hitSlimes.forEach(targetSlime => {
+      targetSlime.hp -= iceDamage;
+      this.sendLog(`サークル氷結がスライムに直撃！ ${iceDamage} ダメージ！ `, "combat");
+
+      // 敵が力尽きたかチェック
+      if (targetSlime.hp <= 0) {
+        this.sendLog(`スライムを完全に凍りつかせて砕いた！ 経験値を 2 獲得。`, "info");
+        this.heroExp += 2;
+        if (this.heroExp >= 10) {
+          this.heroLevel++;
+          this.heroExp = 0;
+          this.heroMaxHp += 5;
+          this.heroHp = this.heroMaxHp;
+          this.heroAttack += 2;
+          this.sendLog(`レベルアップ！ レベル ${this.heroLevel} になりました！`, "system");
+        }
+
+        this.tweens.add({
+          targets: targetSlime.sprite,
+          scaleX: 0,
+          scaleY: 0,
+          alpha: 0,
+          duration: 200,
+          onComplete: () => {
+            if (targetSlime.sprite && targetSlime.sprite.active) targetSlime.sprite.destroy();
+          }
+        });
+
+        const currentIdx = this.slimes.indexOf(targetSlime);
+        if (currentIdx !== -1) {
+          this.slimes.splice(currentIdx, 1);
+        }
+      }
+    });
+
+    this.notifyStateChange(false);
   }
 
   public resetHero() {
@@ -1287,7 +1800,7 @@ export class GridMovementScene extends Phaser.Scene {
     this.heroHp = 20;
     this.heroAttack = 5;
     this.heroExp = 0;
-    this.sendLog(`[Demo] Status reset to Level 1.`, 'system');
+    this.sendLog(`[デモ] ステータスがレベル 1 にリセットされました。 🔄`, 'system');
     this.notifyStateChange();
   }
 }
