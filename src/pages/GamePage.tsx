@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
 import { Gamepad2, Layers, Cpu, ShieldCheck } from 'lucide-react';
+import { allMaps } from '../data/maps';
 
 export default function GamePage() {
+  const [currentMapId, setCurrentMapId] = useState('map_beginning');
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col justify-between text-slate-800 font-sans selection:bg-emerald-500 selection:text-white">
-      
       {/* トップヘッダー */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -15,14 +17,13 @@ export default function GamePage() {
             </div>
             <div>
               <h1 className="font-bold text-lg text-slate-900 leading-tight">Petit_Hero</h1>
-              <p className="text-xs text-slate-500 font-mono">64x64px Sprites & ランダムウォークAI</p>
+              <p className="text-xs text-slate-500 font-mono">64x64px Sprites & オート行動</p>
             </div>
           </div>
-
           <div className="hidden sm:flex items-center gap-6 text-xs text-slate-600 font-medium">
             <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
               <Layers className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Grid: 7 × 7 View / 16 × 16 Field</span>
+              <span>Grid: 9 × 9 View / Field (Variable)</span>
             </div>
             <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
               <Cpu className="w-3.5 h-3.5 text-blue-600" />
@@ -34,7 +35,12 @@ export default function GamePage() {
 
       {/* メインコンテンツ */}
       <main className="flex-1 flex items-center justify-center py-8">
-        <PhaserGameContainer />
+        <PhaserGameContainer 
+          isTestPlay={true} 
+          maps={allMaps} 
+          initialMapId={currentMapId} 
+          onTeleport={(targetMapId) => setCurrentMapId(targetMapId)} 
+        />
       </main>
 
       {/* フッター */}
@@ -49,7 +55,6 @@ export default function GamePage() {
           </div>
         </div>
       </footer>
-
     </div>
   );
 }

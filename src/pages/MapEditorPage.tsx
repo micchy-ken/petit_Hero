@@ -50,6 +50,12 @@ export default function MapEditorPage() {
   const [eventType, setEventType] = useState<'start_point' | 'teleport'>('start_point');
   const [startPointFromMap, setStartPointFromMap] = useState<string>('');
   const [teleportTargetMap, setTeleportTargetMap] = useState<string>('');
+  const [eventCondExpRate, setEventCondExpRate] = useState<number | null>(null);
+  const [eventCondSearchRate, setEventCondSearchRate] = useState<number | null>(null);
+  const [eventCondDefeatRate, setEventCondDefeatRate] = useState<number | null>(null);
+  
+  // アイテム配置用の状態
+  const [itemType, setItemType] = useState<string>('treasure_text');
 
   const [showNewMapModal, setShowNewMapModal] = useState(false);
   const [newMapName, setNewMapName] = useState('');
@@ -91,10 +97,26 @@ export default function MapEditorPage() {
           if (!teleportTargetMap) return;
           data = { targetMap: teleportTargetMap };
         }
+        
+        if (eventCondExpRate !== null) data.requiredExplorationRate = eventCondExpRate;
+        if (eventCondSearchRate !== null) data.requiredSearchRate = eventCondSearchRate;
+        if (eventCondDefeatRate !== null) data.requiredDefeatRate = eventCondDefeatRate;
+        
         newEvents.push({ x, y, type: eventType, data });
       }
       
       handleUpdateCurrentMap({ events: newEvents });
+    } else if (placeMode === 'item') {
+      const existingIndex = currentMap.items.findIndex(i => i.x === x && i.y === y);
+      const newItems = [...currentMap.items];
+      
+      if (existingIndex >= 0) {
+        newItems.splice(existingIndex, 1);
+      } else {
+        newItems.push({ x, y, itemId: itemType });
+      }
+      
+      handleUpdateCurrentMap({ items: newItems });
     }
   };
 
@@ -369,6 +391,28 @@ export default function MapEditorPage() {
             </div>
           </div>
 
+          {/* アイテム設定詳細 */}
+          {placeMode === 'item' && (
+            <div className="flex flex-col gap-3 mt-2 border-t border-slate-600 pt-4">
+              <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider pb-1">
+                Item Properties
+              </h2>
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-400 font-bold uppercase">アイテムタイプ</label>
+                  <select 
+                    value={itemType}
+                    onChange={(e) => setItemType(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                  >
+                    {bgMode === 'text-black' && <option value="treasure_text">宝 (Text)</option>}
+                    <option value="potion">ポーション (未実装)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* イベント設定詳細 */}
           {placeMode === 'event' && (
             <div className="flex flex-col gap-3 mt-2 border-t border-slate-600 pt-4">
@@ -419,6 +463,48 @@ export default function MapEditorPage() {
                     </select>
                   </div>
                 )}
+
+                <div className="flex flex-col gap-1 mt-2 border-t border-slate-600 pt-2">
+                  <label className="text-xs text-slate-400 font-bold uppercase">固有条件 (踏破率)</label>
+                  <select 
+                    value={eventCondExpRate === null ? 'null' : String(eventCondExpRate)}
+                    onChange={(e) => setEventCondExpRate(e.target.value === 'null' ? null : Number(e.target.value))}
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                  >
+                    <option value="null">なし (条件なし)</option>
+                    <option value="50">50%</option>
+                    <option value="80">80%</option>
+                    <option value="100">100%</option>
+                  </select>
+                </div>
+                
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-400 font-bold uppercase">固有条件 (捜索率)</label>
+                  <select 
+                    value={eventCondSearchRate === null ? 'null' : String(eventCondSearchRate)}
+                    onChange={(e) => setEventCondSearchRate(e.target.value === 'null' ? null : Number(e.target.value))}
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                  >
+                    <option value="null">なし (条件なし)</option>
+                    <option value="50">50%</option>
+                    <option value="80">80%</option>
+                    <option value="100">100%</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1 mt-2 border-t border-slate-600 pt-2">
+                  <label className="text-xs text-slate-400 font-bold uppercase">固有条件 (撃破率)</label>
+                  <select 
+                    value={eventCondDefeatRate === null ? 'null' : String(eventCondDefeatRate)}
+                    onChange={(e) => setEventCondDefeatRate(e.target.value === 'null' ? null : Number(e.target.value))}
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                  >
+                    <option value="null">なし (条件なし)</option>
+                    <option value="50">50%</option>
+                    <option value="80">80%</option>
+                    <option value="100">100%</option>
+                  </select>
+                </div>
               </div>
             </div>
           )}
@@ -454,6 +540,7 @@ export default function MapEditorPage() {
                 const x = i % currentMap.width;
                 const y = Math.floor(i / currentMap.width);
                 const hasEvent = currentMap.events.find(e => e.x === x && e.y === y);
+                const hasItem = currentMap.items.find(i => i.x === x && i.y === y);
                 return (
                   <div 
                     key={i} 
@@ -468,6 +555,11 @@ export default function MapEditorPage() {
                      {hasEvent && hasEvent.type === 'teleport' && (
                         <div className="w-full h-full bg-blue-500/50 flex items-center justify-center text-xs font-bold text-blue-100" title={`移動 (to: ${hasEvent.data?.targetMap})`}>
                           T
+                        </div>
+                     )}
+                     {hasItem && hasItem.itemId === 'treasure_text' && (
+                        <div className="w-full h-full bg-amber-500/50 flex items-center justify-center text-xs font-bold text-amber-100" title={`アイテム: ${hasItem.itemId}`}>
+                          宝
                         </div>
                      )}
                   </div>
@@ -529,55 +621,20 @@ export default function MapEditorPage() {
                   ))}
                 </select>
               </div>
-            </div>
-          </div>
-
-          {/* イベント条件の設定 */}
-          <div className="flex flex-col gap-3">
-            <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider border-b border-slate-600 pb-1">
-              Event Conditions
-            </h2>
-            <div className="flex flex-col gap-3">
-              {[
-                { label: '踏破率 (Exploration)', key: 'explorationRate' as const },
-                { label: '捜索率 (Search)', key: 'searchRate' as const },
-                { label: '撃破率 (Defeat)', key: 'defeatRate' as const },
-              ].map((cond) => (
-                <div key={cond.key} className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-400 font-bold uppercase">{cond.label}</label>
-                  <select
-                    value={currentMap.clearConditions?.[cond.key] === null || currentMap.clearConditions?.[cond.key] === undefined ? 'null' : String(currentMap.clearConditions[cond.key])}
-                    onChange={(e) => {
-                      const val = e.target.value === 'null' ? null : Number(e.target.value);
-                      handleUpdateCurrentMap({
-                        clearConditions: {
-                          ...currentMap.clearConditions,
-                          [cond.key]: val
-                        }
-                      });
-                    }}
-                    className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
-                  >
-                    <option value="null">なし</option>
-                    <option value="50">50%</option>
-                    <option value="60">60%</option>
-                    <option value="70">70%</option>
-                    <option value="80">80%</option>
-                    <option value="90">90%</option>
-                    <option value="100">100%</option>
-                  </select>
-                </div>
-              ))}
-              
-              <div className="flex flex-col gap-1 mt-2">
-                <label className="text-xs text-slate-400 font-bold uppercase">必須イベント</label>
-                <div className="text-xs text-slate-500 italic p-2 bg-slate-800/50 rounded border border-slate-700">
-                  (イベントリスト - 後ほど実装)
-                  {/* ここに必須イベントのリストが入ります */}
-                  {currentMap.clearConditions?.requiredEvents?.map((evt, idx) => (
-                    <div key={idx} className="text-slate-300 mt-1">- {evt}</div>
-                  ))}
-                </div>
+              <div className="flex flex-col gap-1 mt-2 border-t border-slate-600 pt-2">
+                <label className="text-xs text-slate-400 font-bold uppercase">敵の出現数 (Max Enemies)</label>
+                <select
+                  value={currentMap.maxEnemies === undefined || currentMap.maxEnemies === 'infinite' ? 'infinite' : String(currentMap.maxEnemies)}
+                  onChange={(e) => handleUpdateCurrentMap({ maxEnemies: e.target.value === 'infinite' ? 'infinite' : Number(e.target.value) })}
+                  className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                >
+                  <option value="infinite">無限 (Infinite)</option>
+                  <option value="5">5体</option>
+                  <option value="10">10体</option>
+                  <option value="20">20体</option>
+                  <option value="30">30体</option>
+                  <option value="50">50体</option>
+                </select>
               </div>
             </div>
           </div>

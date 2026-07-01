@@ -42,8 +42,8 @@ export interface ActionLog {
 
 export class GridMovementScene extends Phaser.Scene {
   public static readonly GRID_SIZE = 64;
-  public static readonly VIEWPORT_COLS = 7;
-  public static readonly VIEWPORT_ROWS = 7;
+  public static readonly VIEWPORT_COLS = 9;
+  public static readonly VIEWPORT_ROWS = 9;
 
   private hero!: Phaser.GameObjects.Sprite;
   private gridGraphics!: Phaser.GameObjects.Graphics;
@@ -57,6 +57,7 @@ export class GridMovementScene extends Phaser.Scene {
   private isTextMode: boolean = true;
   private displayMode: 'normal' | 'text' | 'grayscale' = 'text';
   private slimes: SlimeData[] = [];
+  private itemSprites: { gridX: number, gridY: number, sprite: Phaser.GameObjects.GameObject, itemId: string }[] = [];
 
   // 状態管理
   private currentGridX: number = 7; // 16x16の中央付近(7,7)
@@ -71,6 +72,8 @@ export class GridMovementScene extends Phaser.Scene {
   // 設定
   private moveSpeedMs: number = 1000; // 1グリッド移動にかかる時間(ms)
   private autoMode: 'none' | 'random' | 'seek' = 'seek';
+  public movementBehavior: string = 'unvisited';
+  public combatBehavior: string = 'closest_enemy';
   private showGridLines: boolean = true;
   private isHd2dEffectsEnabled: boolean = false;
 
@@ -101,15 +104,19 @@ export class GridMovementScene extends Phaser.Scene {
   // Reactコールバック用
   private onStateChangeCallback?: (state: HeroState) => void;
   private onLogCallback?: (log: ActionLog) => void;
-  public setOnStatsChange?: (expRate: number, searchRate: number) => void;
+  public setOnStatsChange?: (expRate: number, searchRate: number, defeatRate: number | null) => void;
+  public onTestPlayClear?: () => void;
+  public onTeleport?: (targetMapId: string) => void;
 
   private visitedGrids: Set<string> = new Set();
   private viewedGrids: Set<string> = new Set();
   
+  private totalEnemiesSpawned: number = 0;
+  private enemiesDefeated: number = 0;
+  
   public gridCols: number = 16;
   public gridRows: number = 16;
   public mapData: any = null;
-  public onTestPlayClear?: () => void;
 
   private totalGrids: number = 16 * 16;
 
@@ -851,26 +858,33 @@ export class GridMovementScene extends Phaser.Scene {
     }
 
     // スライムの補充
+    const maxEnemies = this.mapData?.maxEnemies;
+    const isInfinite = maxEnemies === undefined || maxEnemies === 'infinite';
+
     if (this.slimes.length < 5 && Math.random() < 0.1) {
-      const sx = Phaser.Math.Between(2, this.gridCols - 3);
-      const sy = Phaser.Math.Between(2, this.gridRows - 3);
-      // 空いているマスに湧く
-      if (!this.isTileOccupied(sx, sy)) {
-        const { GRID_SIZE } = GridMovementScene;
-        const slimeSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, 'slime_spritesheet', 0);
-        slimeSprite.setDepth(9);
-        slimeSprite.play(this.getAnimKey('slime-idle'));
-        
-        this.slimes.push({
-          id: `slime-${Math.random().toString(36).substring(2, 9)}`,
-          sprite: slimeSprite,
-          gridX: sx,
-          gridY: sy,
-          isMoving: false,
-          hp: 10,
-          maxHp: 10
-        });
-        this.sendLog('野生のスライムが現れた！ 👾', 'system');
+      if (isInfinite || this.totalEnemiesSpawned < (maxEnemies as number)) {
+        const sx = Phaser.Math.Between(2, this.gridCols - 3);
+        const sy = Phaser.Math.Between(2, this.gridRows - 3);
+        // 空いているマスに湧く
+        if (!this.isTileOccupied(sx, sy)) {
+          const { GRID_SIZE } = GridMovementScene;
+          const slimeSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, 'slime_spritesheet', 0);
+          slimeSprite.setDepth(9);
+          slimeSprite.play(this.getAnimKey('slime-idle'));
+          
+          this.slimes.push({
+            id: `slime-${Math.random().toString(36).substring(2, 9)}`,
+            sprite: slimeSprite,
+            gridX: sx,
+            gridY: sy,
+            isMoving: false,
+            hp: 10,
+            maxHp: 10
+          });
+          
+          this.totalEnemiesSpawned++;
+          this.sendLog('野生のスライムが現れた！ 👾', 'system');
+        }
       }
     }
 
@@ -878,55 +892,60 @@ export class GridMovementScene extends Phaser.Scene {
     if (this.autoMode !== 'none' && !this.isMoving) {
       if (this.autoMode === 'seek') {
         // 索敵・戦闘モード (AIを使わないロジック)
-        if (this.slimes.length > 0) {
+        let targetSlime: SlimeData | null = null;
+        
+        if (this.slimes.length > 0 && this.combatBehavior === 'closest_enemy') {
           // 最も近いスライムを探す
-          let closestSlime: SlimeData | null = null;
           let minDistance = Infinity;
 
           this.slimes.forEach(slime => {
             const dist = Math.abs(slime.gridX - this.currentGridX) + Math.abs(slime.gridY - this.currentGridY);
             if (dist < minDistance) {
               minDistance = dist;
-              closestSlime = slime;
+              targetSlime = slime;
             }
           });
+        }
 
-          if (closestSlime) {
-            // 最も近いスライムに近づく方向を決定
-            const possibleDirs: Direction[] = [];
-            const sx = closestSlime.gridX;
-            const sy = closestSlime.gridY;
-            const dx = sx - this.currentGridX;
-            const dy = sy - this.currentGridY;
+        if (targetSlime) {
+          // 最も近いスライムに近づく方向を決定
+          const possibleDirs: Direction[] = [];
+          const sx = targetSlime.gridX;
+          const sy = targetSlime.gridY;
+          const dx = sx - this.currentGridX;
+          const dy = sy - this.currentGridY;
 
-            if (this.allow8Way) {
-              if (dx > 0 && dy > 0) possibleDirs.push('down-right');
-              else if (dx > 0 && dy < 0) possibleDirs.push('up-right');
-              else if (dx < 0 && dy > 0) possibleDirs.push('down-left');
-              else if (dx < 0 && dy < 0) possibleDirs.push('up-left');
-              else if (dx > 0) possibleDirs.push('right');
-              else if (dx < 0) possibleDirs.push('left');
-              else if (dy > 0) possibleDirs.push('down');
-              else if (dy < 0) possibleDirs.push('up');
-            } else {
-              if (dx > 0) possibleDirs.push('right');
-              else if (dx < 0) possibleDirs.push('left');
-              if (dy > 0) possibleDirs.push('down');
-              else if (dy < 0) possibleDirs.push('up');
-            }
+          if (this.allow8Way) {
+            if (dx > 0 && dy > 0) possibleDirs.push('down-right');
+            else if (dx > 0 && dy < 0) possibleDirs.push('up-right');
+            else if (dx < 0 && dy > 0) possibleDirs.push('down-left');
+            else if (dx < 0 && dy < 0) possibleDirs.push('up-left');
+            else if (dx > 0) possibleDirs.push('right');
+            else if (dx < 0) possibleDirs.push('left');
+            else if (dy > 0) possibleDirs.push('down');
+            else if (dy < 0) possibleDirs.push('up');
+          } else {
+            if (dx > 0) possibleDirs.push('right');
+            else if (dx < 0) possibleDirs.push('left');
+            if (dy > 0) possibleDirs.push('down');
+            else if (dy < 0) possibleDirs.push('up');
+          }
 
-            if (possibleDirs.length > 0) {
-              // 複数ある場合はランダムに一つ選ぶ
-              const nextDir = Phaser.Utils.Array.GetRandom(possibleDirs);
-              this.moveInDirection(nextDir);
-            }
+          if (possibleDirs.length > 0) {
+            // 複数ある場合はランダムに一つ選ぶ
+            const nextDir = Phaser.Utils.Array.GetRandom(possibleDirs);
+            this.moveInDirection(nextDir);
           }
         } else {
-          // 敵がいない場合はランダム散策
-          this.performRandomWalk();
+          // 敵がいない場合、または戦闘行動がない場合
+          if (this.movementBehavior === 'unvisited') {
+            this.performExploreWalk();
+          } else {
+            this.performRandomWalk();
+          }
         }
       } else {
-        // 通常のランダムウォーク
+        // 通常のランダムウォーク (seek 以外)
         this.performRandomWalk();
       }
     }
@@ -965,6 +984,51 @@ export class GridMovementScene extends Phaser.Scene {
 
     if (possibleDirs.length > 0) {
       const nextDir = Phaser.Utils.Array.GetRandom(possibleDirs);
+      this.moveInDirection(nextDir);
+    }
+  }
+
+  private performExploreWalk() {
+    // 未踏破エリアを探す簡易的な探索
+    // 周囲8マスまたは4マスの中で、未訪問のマスを優先する
+    const neighbors = [
+      { dir: 'up' as Direction, dx: 0, dy: -1 },
+      { dir: 'down' as Direction, dx: 0, dy: 1 },
+      { dir: 'left' as Direction, dx: -1, dy: 0 },
+      { dir: 'right' as Direction, dx: 1, dy: 0 },
+    ];
+    if (this.allow8Way) {
+      neighbors.push(
+        { dir: 'up-left' as Direction, dx: -1, dy: -1 },
+        { dir: 'up-right' as Direction, dx: 1, dy: -1 },
+        { dir: 'down-left' as Direction, dx: -1, dy: 1 },
+        { dir: 'down-right' as Direction, dx: 1, dy: 1 }
+      );
+    }
+
+    const unvisitedDirs: Direction[] = [];
+    const validDirs: Direction[] = [];
+
+    for (const n of neighbors) {
+      const nx = this.currentGridX + n.dx;
+      const ny = this.currentGridY + n.dy;
+      if (nx >= 0 && nx < this.gridCols && ny >= 0 && ny < this.gridRows) {
+        if (!this.isTileOccupied(nx, ny)) {
+          validDirs.push(n.dir);
+          const gridKey = `${nx},${ny}`;
+          if (!this.visitedGrids.has(gridKey)) {
+            unvisitedDirs.push(n.dir);
+          }
+        }
+      }
+    }
+
+    if (unvisitedDirs.length > 0) {
+      const nextDir = Phaser.Utils.Array.GetRandom(unvisitedDirs);
+      this.moveInDirection(nextDir);
+    } else if (validDirs.length > 0) {
+      // 未訪問がない場合はランダムに移動
+      const nextDir = Phaser.Utils.Array.GetRandom(validDirs);
       this.moveInDirection(nextDir);
     }
   }
@@ -1131,6 +1195,8 @@ export class GridMovementScene extends Phaser.Scene {
         this.isMoving = false;
 
         if (slime.hp <= 0) {
+          this.enemiesDefeated++;
+          this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
           this.sendLog(`スライムを倒した！ 経験値を 2 獲得。 🌟`, 'info');
           this.heroExp += 2;
           if (this.heroExp >= 10) {
@@ -1407,6 +1473,7 @@ export class GridMovementScene extends Phaser.Scene {
         this.hero.play(this.getAnimKey(`idle-${animDir}`), true);
         this.notifyStateChange(false);
         this.checkMapEvents();
+        this.checkMapItems();
       }
     });
 
@@ -1428,27 +1495,66 @@ export class GridMovementScene extends Phaser.Scene {
     return true;
   }
 
+  private checkMapItems() {
+    const itemIndex = this.itemSprites.findIndex(i => i.gridX === this.currentGridX && i.gridY === this.currentGridY);
+    if (itemIndex >= 0) {
+      const item = this.itemSprites[itemIndex];
+      if (item.itemId === 'treasure_text') {
+        this.sendLog('宝を手に入れた！ ✨ (Exp +50)', 'info');
+        this.heroExp += 50;
+        if (this.heroExp >= 10) {
+          while (this.heroExp >= 10) {
+             this.heroExp -= 10;
+             this.addLevel();
+          }
+        }
+      } else {
+        this.sendLog(`アイテムを手に入れた！ (${item.itemId})`, 'info');
+      }
+      if (item.sprite && item.sprite.active) {
+        item.sprite.destroy();
+      }
+      this.itemSprites.splice(itemIndex, 1);
+      this.notifyStateChange(false);
+    }
+  }
+
   private checkMapEvents() {
     if (!this.mapData || !this.mapData.events) return;
     const event = this.mapData.events.find((e: any) => e.x === this.currentGridX && e.y === this.currentGridY);
     if (event && event.type === 'teleport') {
-      const conditions = this.mapData.clearConditions || {};
+      const eventData = event.data || {};
       let met = true;
       const expRate = (this.visitedGrids.size / this.totalGrids) * 100;
       const sRate = (this.viewedGrids.size / this.totalGrids) * 100;
+      const maxEnemies = this.mapData?.maxEnemies;
+      let dRate = 0;
+      if (maxEnemies !== undefined && maxEnemies !== 'infinite' && (maxEnemies as number) > 0) {
+        dRate = (this.enemiesDefeated / (maxEnemies as number)) * 100;
+      }
       
-      if (conditions.explorationRate && expRate < conditions.explorationRate) met = false;
-      if (conditions.searchRate && sRate < conditions.searchRate) met = false;
-      // skip defeatRate for now as it's ∞
+      if (eventData.requiredExplorationRate && expRate < eventData.requiredExplorationRate) met = false;
+      if (eventData.requiredSearchRate && sRate < eventData.requiredSearchRate) met = false;
+      if (eventData.requiredDefeatRate && dRate < eventData.requiredDefeatRate) met = false;
       
       if (met) {
         if (this.onTestPlayClear) {
           this.onTestPlayClear();
-        } else {
+        } else if (this.onTeleport && eventData.targetMap) {
           this.sendLog(`条件クリア！次のマップへ移動します。`, 'system');
+          this.onTeleport(eventData.targetMap);
+        } else {
+          this.sendLog(`条件クリア！次のマップへ移動します。(※移動先未設定)`, 'system');
         }
       } else {
-        this.sendLog(`マップ移動条件を満たしていません (踏破率: ${Math.floor(expRate)}%, 捜索率: ${Math.floor(sRate)}%)`, 'info');
+        const reqExp = eventData.requiredExplorationRate || 0;
+        const reqSearch = eventData.requiredSearchRate || 0;
+        const reqDefeat = eventData.requiredDefeatRate || 0;
+        let reason = '';
+        if (reqExp > 0 && expRate < reqExp) reason += ` 踏破率: ${Math.floor(expRate)}% / ${reqExp}%`;
+        if (reqSearch > 0 && sRate < reqSearch) reason += ` 捜索率: ${Math.floor(sRate)}% / ${reqSearch}%`;
+        if (reqDefeat > 0 && dRate < reqDefeat) reason += ` 撃破率: ${Math.floor(dRate)}% / ${reqDefeat}%`;
+        this.sendLog(`イベント発生条件を満たしていません:${reason}`, 'info');
       }
     }
   }
@@ -1483,7 +1589,12 @@ export class GridMovementScene extends Phaser.Scene {
     if (this.setOnStatsChange) {
       const expRate = (this.visitedGrids.size / this.totalGrids) * 100;
       const searchRate = (this.viewedGrids.size / this.totalGrids) * 100;
-      this.setOnStatsChange(expRate, searchRate);
+      const maxEnemies = this.mapData?.maxEnemies;
+      let dRate = null;
+      if (maxEnemies !== undefined && maxEnemies !== 'infinite' && (maxEnemies as number) > 0) {
+        dRate = (this.enemiesDefeated / (maxEnemies as number)) * 100;
+      }
+      this.setOnStatsChange(expRate, searchRate, dRate);
     }
   }
 
@@ -1511,6 +1622,20 @@ export class GridMovementScene extends Phaser.Scene {
 
   public resetPosition() {
     if (this.isMoving) return;
+
+    this.totalEnemiesSpawned = 0;
+    this.enemiesDefeated = 0;
+    
+    // reset slimes array when loading map
+    this.slimes.forEach(s => {
+      if (s.sprite && s.sprite.active) s.sprite.destroy();
+    });
+    this.slimes = [];
+    
+    this.itemSprites.forEach(item => {
+      if (item.sprite && item.sprite.active) item.sprite.destroy();
+    });
+    this.itemSprites = [];
 
     if (this.mapData) {
        // まず設定なし(fromMapがnullまたは空文字列)の初期値を探す
@@ -1550,7 +1675,32 @@ export class GridMovementScene extends Phaser.Scene {
       this.hero.play(this.getAnimKey('idle-down'));
     }
     this.currentDirection = 'idle';
+    this.spawnMapItems();
     this.notifyStateChange(false);
+  }
+
+  private spawnMapItems() {
+    if (!this.mapData || !this.mapData.items) return;
+    const { GRID_SIZE } = GridMovementScene;
+    
+    this.mapData.items.forEach((item: any) => {
+      if (item.itemId === 'treasure_text') {
+        const text = this.add.text(
+          item.x * GRID_SIZE + GRID_SIZE / 2, 
+          item.y * GRID_SIZE + GRID_SIZE / 2, 
+          '宝', 
+          { fontFamily: 'serif', fontSize: '24px', color: '#fbbf24', fontStyle: 'bold' }
+        );
+        text.setOrigin(0.5, 0.5);
+        text.setDepth(5);
+        this.itemSprites.push({
+          gridX: item.x,
+          gridY: item.y,
+          sprite: text,
+          itemId: item.itemId
+        });
+      }
+    });
   }
 
   public addLevel() {
@@ -1675,6 +1825,8 @@ export class GridMovementScene extends Phaser.Scene {
 
         // スライムの撃破処理
         if (targetSlime.hp <= 0) {
+          this.enemiesDefeated++;
+          this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
           this.sendLog(`スライムを焼き尽くした！ 経験値を 2 獲得。`, "info");
           this.heroExp += 2;
           if (this.heroExp >= 10) {
@@ -1904,6 +2056,8 @@ export class GridMovementScene extends Phaser.Scene {
 
       // 敵が力尽きたかチェック
       if (targetSlime.hp <= 0) {
+        this.enemiesDefeated++;
+        this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
         this.sendLog(`スライムを完全に凍りつかせて砕いた！ 経験値を 2 獲得。`, "info");
         this.heroExp += 2;
         if (this.heroExp >= 10) {

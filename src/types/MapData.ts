@@ -28,6 +28,7 @@ export interface MapData {
   events: MapEvent[];
   items: MapItem[];
   enemies: string[]; // 最大3種類
+  maxEnemies?: number | 'infinite'; // 出現数
   boss?: string;     // 最大1種類
   clearConditions?: MapClearConditions;
 }
