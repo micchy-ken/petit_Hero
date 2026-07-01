@@ -1,27 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings, Play } from 'lucide-react';
+import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings, Play, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MapData } from '../types/MapData';
 import { getAvailableEnemies, getAvailableBosses } from '../data/EnemyAssets';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
 
-const mapModules = (import.meta as any).glob('../data/maps/*.ts', { eager: true });
-const initialMaps: MapData[] = [];
-const seenIds = new Set<string>();
-for (const path in mapModules) {
-  const mod: any = mapModules[path];
-  for (const key in mod) {
-    if (mod[key] && mod[key].id) {
-      if (!seenIds.has(mod[key].id)) {
-        seenIds.add(mod[key].id);
-        initialMaps.push(mod[key]);
-      }
-    }
-  }
-}
-// fallback if empty
-if (initialMaps.length === 0) {
-  initialMaps.push({
+const fallbackInitialMaps: MapData[] = [
+  {
     id: 'map_beginning',
     name: '始まり',
     width: 16,
@@ -30,20 +15,48 @@ if (initialMaps.length === 0) {
     events: [],
     items: [],
     enemies: ['敵']
-  });
-}
+  }
+];
 
 export default function MapEditorPage() {
   const navigate = useNavigate();
   
-  const [maps, setMaps] = useState<MapData[]>(initialMaps);
-  const [currentMapId, setCurrentMapId] = useState<string>(initialMaps[0].id);
+  const [maps, setMaps] = useState<MapData[]>([]);
+  const [currentMapId, setCurrentMapId] = useState<string>('');
   const [isTestPlay, setIsTestPlay] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
-  
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/maps?t=' + Date.now(), { cache: 'no-store' })
+      .then(res => res.json())
+      .then(data => {
+        let loadedMaps = Array.isArray(data) ? data : [];
+        // Ensure map_beginning is always present in the selection list to preserve consistency
+        const hasBeginning = loadedMaps.some((m: MapData) => m.id === 'map_beginning');
+        if (!hasBeginning) {
+          loadedMaps = [fallbackInitialMaps[0], ...loadedMaps];
+        }
+        setMaps(loadedMaps);
+        
+        // Select 'map_beginning' as the default current map if it is available
+        const defaultId = loadedMaps.some((m: MapData) => m.id === 'map_beginning')
+          ? 'map_beginning'
+          : (loadedMaps[0]?.id || '');
+        setCurrentMapId(defaultId);
+        setIsLoading(false);
+      })
+      .catch(e => {
+        console.error(e);
+        setMaps(fallbackInitialMaps);
+        setCurrentMapId(fallbackInitialMaps[0].id);
+        setIsLoading(false);
+      });
+  }, []);
+
   const currentMap = maps.find(m => m.id === currentMapId) || maps[0];
 
-  const [bgMode, setBgMode] = useState<MapData['bgMode']>(currentMap.bgMode);
+  const [bgMode, setBgMode] = useState<MapData['bgMode']>(currentMap?.bgMode || 'text-black');
   const [placeMode, setPlaceMode] = useState<'obstacle' | 'item' | 'event'>('obstacle');
   
   // イベント配置用の状態
@@ -157,6 +170,16 @@ export default function MapEditorPage() {
         finalUpdates.boss = undefined;
       }
     }
+
+    const targetMap = maps.find(m => m.id === currentMapId) || currentMap;
+    const nextWidth = updates.width !== undefined ? updates.width : targetMap.width;
+    const nextHeight = updates.height !== undefined ? updates.height : targetMap.height;
+
+    if (updates.width !== undefined || updates.height !== undefined) {
+      finalUpdates.events = targetMap.events.filter(e => e.x < nextWidth && e.y < nextHeight);
+      finalUpdates.items = targetMap.items.filter(item => item.x < nextWidth && item.y < nextHeight);
+    }
+
     setMaps(maps.map(m => m.id === currentMapId ? { ...m, ...finalUpdates } : m));
   };
 
@@ -177,6 +200,10 @@ export default function MapEditorPage() {
       alert('保存エラー: サーバーが起動していない可能性があります');
     }
   };
+
+  if (isLoading) {
+    return <div className="min-h-screen bg-black flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>;
+  }
 
   if (isTestPlay) {
     return (
@@ -580,6 +607,48 @@ export default function MapEditorPage() {
 
         {/* 右側：マップ設定領域 */}
         <aside className="w-full md:w-80 bg-slate-700 rounded-lg border border-slate-600 shadow-xl p-4 flex flex-col gap-6 overflow-y-auto" style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1), 0 4px 6px rgba(0,0,0,0.3)' }}>
+          {/* マップ固有設定 */}
+          <div className="flex flex-col gap-3 border-b border-slate-600 pb-4">
+            <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider pb-1">
+              Map Config
+            </h2>
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-slate-400 font-bold uppercase">マップ表示名</label>
+                <input 
+                  type="text"
+                  value={currentMap.name}
+                  onChange={(e) => handleUpdateCurrentMap({ name: e.target.value })}
+                  className="w-full bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div className="flex gap-3">
+                <div className="flex flex-col gap-1 w-1/2">
+                  <label className="text-xs text-slate-400 font-bold uppercase">幅 (Width)</label>
+                  <input 
+                    type="number"
+                    value={currentMap.width}
+                    onChange={(e) => handleUpdateCurrentMap({ width: Math.max(1, Number(e.target.value)) })}
+                    min={4}
+                    max={64}
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div className="flex flex-col gap-1 w-1/2">
+                  <label className="text-xs text-slate-400 font-bold uppercase">高さ (Height)</label>
+                  <input 
+                    type="number"
+                    value={currentMap.height}
+                    onChange={(e) => handleUpdateCurrentMap({ height: Math.max(1, Number(e.target.value)) })}
+                    min={4}
+                    max={64}
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* 敵とボスの設定 */}
           <div className="flex flex-col gap-3">
             <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider border-b border-slate-600 pb-1">

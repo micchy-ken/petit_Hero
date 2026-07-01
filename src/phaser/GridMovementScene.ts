@@ -42,8 +42,8 @@ export interface ActionLog {
 
 export class GridMovementScene extends Phaser.Scene {
   public static readonly GRID_SIZE = 64;
-  public static readonly VIEWPORT_COLS = 9;
-  public static readonly VIEWPORT_ROWS = 9;
+  public static readonly VIEWPORT_COLS = 7;
+  public static readonly VIEWPORT_ROWS = 7;
 
   private hero!: Phaser.GameObjects.Sprite;
   private gridGraphics!: Phaser.GameObjects.Graphics;

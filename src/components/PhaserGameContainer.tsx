@@ -72,8 +72,8 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
     // ゲームコンフィグ (トータル576x576px = 9 x 64px)
     const config: Phaser.Types.Core.GameConfig = {
       type: Phaser.AUTO,
-      width: 576,
-      height: 576,
+      width: 448,
+      height: 448,
       parent: gameContainerRef.current,
       backgroundColor: '#ecfdf5',
       scene: [GridMovementScene],
@@ -171,7 +171,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
     if (sceneRef.current && maps && initialMapId) {
       const scene = sceneRef.current;
       const targetMap = maps.find(m => m.id === initialMapId);
-      if (targetMap && targetMap.id !== scene.mapData?.id) {
+      if (targetMap && (targetMap.id !== scene.mapData?.id || targetMap !== scene.mapData)) {
         scene.mapData = targetMap;
         scene.gridCols = targetMap.width;
         scene.gridRows = targetMap.height;
@@ -292,7 +292,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
 
             
             {/* Phaser描画ターゲットとログオーバーレイのラッパー */}
-            <div className="relative rounded-lg overflow-hidden shadow-inner border-2 border-emerald-600 bg-emerald-50 select-none" style={{ width: 576, height: 576 }}>
+            <div className="relative rounded-lg overflow-hidden shadow-inner border-2 border-emerald-600 bg-emerald-50 select-none" style={{ width: 448, height: 448 }}>
               <div 
                 ref={gameContainerRef} 
                 className="w-full h-full"

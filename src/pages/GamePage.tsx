@@ -1,10 +1,58 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
-import { Gamepad2, Layers, Cpu, ShieldCheck } from 'lucide-react';
-import { allMaps } from '../data/maps';
+import { Gamepad2, Layers, Cpu, ShieldCheck, Loader2 } from 'lucide-react';
+import { MapData } from '../types/MapData';
+
+const fallbackBeginningMap: MapData = {
+  id: 'map_beginning',
+  name: '始まり',
+  width: 16,
+  height: 16,
+  bgMode: 'text-black',
+  events: [],
+  items: [],
+  enemies: ['slime']
+};
 
 export default function GamePage() {
   const [currentMapId, setCurrentMapId] = useState('map_beginning');
+  const [allMaps, setAllMaps] = useState<MapData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/maps?t=' + Date.now(), { cache: 'no-store' })
+      .then(res => res.json())
+      .then(data => {
+        let loadedMaps = Array.isArray(data) ? data : [];
+        const hasBeginning = loadedMaps.some((m: MapData) => m.id === 'map_beginning');
+        if (!hasBeginning) {
+          loadedMaps = [fallbackBeginningMap, ...loadedMaps];
+        }
+        setAllMaps(loadedMaps);
+        
+        // Ensure starting map is selected
+        if (loadedMaps.some((m: MapData) => m.id === 'map_beginning')) {
+          setCurrentMapId('map_beginning');
+        } else if (loadedMaps.length > 0) {
+          setCurrentMapId(loadedMaps[0].id);
+        }
+        setIsLoading(false);
+      })
+      .catch(e => {
+        console.error(e);
+        setAllMaps([fallbackBeginningMap]);
+        setCurrentMapId('map_beginning');
+        setIsLoading(false);
+      });
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col justify-between text-slate-800 font-sans selection:bg-emerald-500 selection:text-white">
@@ -23,7 +71,7 @@ export default function GamePage() {
           <div className="hidden sm:flex items-center gap-6 text-xs text-slate-600 font-medium">
             <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
               <Layers className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Grid: 9 × 9 View / Field (Variable)</span>
+              <span>Grid: 7 × 7 View / Field (Variable)</span>
             </div>
             <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
               <Cpu className="w-3.5 h-3.5 text-blue-600" />
