@@ -20,7 +20,8 @@ export const BeginningMap: MapData = {
       "y": 7,
       "type": "teleport",
       "data": {
-        "targetMap": "map_beginning"
+        "targetMap": "map_1782870426703",
+        "requiredDefeatRate": 100
       }
     }
   ],
@@ -28,5 +29,5 @@ export const BeginningMap: MapData = {
   "enemies": [
     "slime"
   ],
-  "maxEnemies": 10
+  "maxEnemies": 0
 };

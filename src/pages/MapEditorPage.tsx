@@ -152,6 +152,7 @@ export default function MapEditorPage() {
   };
 
   const handleUpdateCurrentMap = (updates: Partial<MapData>) => {
+    console.log("Updating map with:", updates);
     let finalUpdates = { ...updates };
     if (updates.bgMode) {
       setBgMode(updates.bgMode);
@@ -181,19 +182,23 @@ export default function MapEditorPage() {
   };
 
   const handleSave = async () => {
+    console.log("Attempting to save map:", currentMap);
     try {
       const response = await fetch('/api/save-map', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(currentMap)
       });
+      console.log("Save response status:", response.status);
       if (response.ok) {
         alert('保存しました (Reflected to JS file)');
       } else {
-        alert('保存に失敗しました');
+        const errorText = await response.text();
+        console.error("Save failed:", errorText);
+        alert('保存に失敗しました: ' + errorText);
       }
     } catch (e) {
-      console.error(e);
+      console.error("Save error:", e);
       alert('保存エラー: サーバーが起動していない可能性があります');
     }
   };
@@ -690,10 +695,17 @@ export default function MapEditorPage() {
               <div className="flex flex-col gap-1 mt-2 border-t border-slate-600 pt-2">
                 <label className="text-xs text-slate-400 font-bold uppercase">敵の出現数 (Max Enemies)</label>
                 <select
-                  value={currentMap.maxEnemies === undefined || currentMap.maxEnemies === 'infinite' ? 'infinite' : String(currentMap.maxEnemies)}
-                  onChange={(e) => handleUpdateCurrentMap({ maxEnemies: e.target.value === 'infinite' ? 'infinite' : Number(e.target.value) })}
+                  value={currentMap.maxEnemies === undefined || currentMap.maxEnemies === 'infinite' ? 'infinite' : currentMap.maxEnemies === 0 ? 'none' : String(currentMap.maxEnemies)}
+                  onChange={(e) => {
+                    let val: 'infinite' | number = 'infinite';
+                    if (e.target.value === 'infinite') val = 'infinite';
+                    else if (e.target.value === 'none') val = 0;
+                    else val = Number(e.target.value);
+                    handleUpdateCurrentMap({ maxEnemies: val });
+                  }}
                   className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
                 >
+                  <option value="none">なし (None)</option>
                   <option value="infinite">無限 (Infinite)</option>
                   <option value="5">5体</option>
                   <option value="10">10体</option>

@@ -304,7 +304,11 @@ export class GridMovementScene extends Phaser.Scene {
 
     // 5.5. スライムの配置
     this.slimes = [];
-    for (let i = 0; i < 5; i++) {
+    const maxEnemies = this.mapData?.maxEnemies;
+    const isInfinite = maxEnemies === undefined || maxEnemies === 'infinite';
+    const initialSpawnCount = isInfinite ? 5 : Math.min(5, maxEnemies as number);
+
+    for (let i = 0; i < initialSpawnCount; i++) {
       const sx = Phaser.Math.Between(2, this.gridCols - 3);
       const sy = Phaser.Math.Between(2, this.gridRows - 3);
       const slimeSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, 'slime_spritesheet', 0);
@@ -320,6 +324,7 @@ export class GridMovementScene extends Phaser.Scene {
         hp: 10,
         maxHp: 10
       });
+      this.totalEnemiesSpawned++;
     }
 
     // 6. HD-2D マナ粒子（ホタル風パーティクル）の生成（カメラ固定領域内で生成）

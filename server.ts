@@ -11,8 +11,12 @@ async function startServer() {
 
   app.post("/api/save-map", (req, res) => {
     try {
+      console.log("Received POST request to /api/save-map");
       const mapData = req.body;
+      console.log("Received map data ID:", mapData ? mapData.id : "null");
+      console.log("Received full map data:", JSON.stringify(mapData));
       if (!mapData || !mapData.id) {
+        console.error("Invalid map data received");
         return res.status(400).json({ error: "Invalid map data" });
       }
 
@@ -33,8 +37,9 @@ export const ${exportName}: MapData = ${JSON.stringify(mapData, null, 2)};
       const fileName = `${exportName}.ts`;
       const filePath = path.join(process.cwd(), "src", "data", "maps", fileName);
       
+      console.log(`Attempting to write to: ${filePath}`);
       fs.writeFileSync(filePath, content);
-      console.log(`Saved map to ${filePath}`);
+      console.log(`Successfully wrote file to: ${filePath}`);
 
       // Automatically update src/data/maps/index.ts
       const mapsDir = path.join(process.cwd(), "src", "data", "maps");
@@ -60,7 +65,7 @@ export const allMaps: MapData[] = [
 
       res.json({ success: true, filePath });
     } catch (e: any) {
-      console.error(e);
+      console.error("Error in /api/save-map:", e);
       res.status(500).json({ error: e.message });
     }
   });
