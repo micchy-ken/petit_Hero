@@ -6,10 +6,27 @@ export const BeginningMap: MapData = {
   "width": 8,
   "height": 8,
   "bgMode": "text-black",
-  "events": [],
+  "events": [
+    {
+      "x": 0,
+      "y": 0,
+      "type": "start_point",
+      "data": {
+        "fromMap": null
+      }
+    },
+    {
+      "x": 7,
+      "y": 7,
+      "type": "teleport",
+      "data": {
+        "targetMap": "map_beginning"
+      }
+    }
+  ],
   "items": [],
   "enemies": [
     "slime"
-  ]
+  ],
+  "maxEnemies": 10
 };
-
